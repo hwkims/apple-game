@@ -1,6 +1,7 @@
 # 🍎 Apple Merge Game
 
 This is a simple web-based game where you combine apples with numbers to reach a sum of 10.  It's built with HTML, CSS, and JavaScript, and is designed to be responsive and playable on both desktop and mobile devices.
+![image](https://github.com/user-attachments/assets/bc24c27a-0969-4d96-9ee4-74094bdfca62)
 
 ## Features
 
