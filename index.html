@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍎 Apple Merge</title>
+    <style>
+        body {
+            font-family: 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Container for score */
+        #header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 90vw;
+            max-width: 90vh;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        #score-display {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+
+        /* Combinable Pairs Display */
+        #combinable-pairs {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #555;
+             z-index: 20;
+        }
+
+        #game-container {
+            position: relative;
+            width: 90vw;
+            height: 90vw;
+            max-width: 90vh;
+            max-height: 90vh;
+             background-color: #a7d9ed;
+            border: 2px solid #333;
+            border-radius: 15px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            touch-action: none;
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            gap: 3px;
+        }
+
+        .grid-cell {
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            position: relative;
+            border-radius: 8px;
+        }
+
+        #selection-box {
+            position: absolute;
+            border: 2px dashed #ff7f00;  /* Orange dashed border */
+            background-color: rgba(255, 127, 0, 0.2); /* Transparent orange */
+            display: none;
+            z-index: 10;
+            pointer-events: none;
+            border-radius: 7px;
+        }
+
+        .apple {
+            width: 85%;
+            height: 85%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s ease-out, filter 0.1s ease-out;
+             background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            box-sizing: border-box;
+            font-size: calc(2em + 1.5vw);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .apple span {
+            font-size: 0.5em;
+            color: #333;
+            font-weight: bold;
+            z-index: 3;
+            pointer-events: none;
+            user-select: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .apple.selected {
+            transform: translate(-50%, -50%) scale(1.1);
+            filter: brightness(1.2);
+            z-index: 4;
+        }
+
+        .apple.removing {
+             animation: confettiExplode 0.6s ease-out forwards;
+        }
+
+        @keyframes confettiExplode {
+            0% { opacity: 1; transform: scale(1) rotate(0); }
+            100% {
+              opacity: 0;
+              transform: scale(var(--random-scale))
+                         translateX(calc(var(--random-x) * 40px))
+                         translateY(calc(var(--random-y) * 40px))
+                         rotate(calc(var(--random-rotate) * 360deg));
+            }
+        }
+
+        #game-over-screen {
+           position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 42px;
+            z-index: 30;
+            border-radius: 15px;
+        }
+
+        #game-over-screen button {
+            margin-top: 25px;
+            padding: 12px 24px;
+            font-size: 24px;
+            cursor: pointer;
+           background-color: #ff7f00;  /* Orange button */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.2s ease;
+        }
+
+        #game-over-screen button:hover {
+            background-color: #e67100; /* Darker orange on hover */
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div id="score-display">Score: 0</div>
+    </div>
+      <!-- Combinable Pairs Display -->
+    <div id="combinable-pairs">Pairs: 0</div>
+    <div id="game-container">
+        <div id="selection-box"></div>
+        <div id="game-over-screen">
+            <div>No More Moves!</div>
+            <button onclick="restartGame()">Restart</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const selectionBox = document.getElementById('selection-box');
+        const scoreDisplay = document.getElementById('score-display');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const combinablePairsDisplay = document.getElementById('combinable-pairs'); // Get the element
+        const gridSize = 10;
+        let startCell = null;
+        let isSelecting = false;
+        let selectedApples = [];
+        let score = 0;
+        let isMouseDown = false;
+        let lastTouchEnd = 0;
+
+        function getRelativeCoordinates(event, element) {
+            const rect = element.getBoundingClientRect();
+            const clientX = event.clientX || (event.touches && event.touches[0].clientX);
+            const clientY = event.clientY || (event.touches && event.touches[0].clientY);
+            if (clientX === undefined || clientY === undefined) { return null; }
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function getCellFromCoordinates(coords) {
+            if (!coords) return null;
+            const cellSize = gameContainer.offsetWidth / gridSize;
+            const col = Math.floor(coords.x / cellSize);
+            const row = Math.floor(coords.y / cellSize);
+            if (row >= 0 && row < gridSize && col >= 0 && col < gridSize) {
+                return { row, col };
+            }
+            return null;
+        }
+
+        function createApple(row, col) {
+            const apple = document.createElement('div');
+            apple.classList.add('apple');
+            const randomNumber = Math.floor(Math.random() * 9) + 1;
+            apple.innerHTML = `🍎<span>${randomNumber}</span>`;
+            apple.dataset.value = randomNumber;
+            apple.dataset.row = row;
+            apple.dataset.col = col;
+            return apple;
+        }
+
+        function populateGrid() {
+            for (let row = 0; row < gridSize; row++) {
+                for (let col = 0; col < gridSize; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('grid-cell');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.addEventListener('touchstart', preventZoom, { passive: false });
+                    const apple = createApple(row, col);
+                    cell.appendChild(apple);
+                    gameContainer.appendChild(cell);
+                }
+            }
+              updateCombinablePairs(); // Update on grid population
+        }
+
+        function preventZoom(e) {
+            if (e.touches && e.touches.length > 1) {
+                e.preventDefault(); return;
+            }
+            if (e.timeStamp - lastTouchEnd < 300) { e.preventDefault(); }
+        }
+
+
+        function handleSelectionStart(event) {
+            if (event.type === 'touchend') { lastTouchEnd = event.timeStamp; }
+
+            const coords = getRelativeCoordinates(event, gameContainer);
+            const cell = getCellFromCoordinates(coords);
+            if (!cell) return;
+
+            const elementAtPoint = document.elementFromPoint(
+                event.clientX || (event.touches && event.touches[0].clientX),
+                event.clientY || (event.touches && event.touches[0].clientY)
+            );
+            if (!elementAtPoint || !elementAtPoint.classList.contains('apple')) { return; }
+
+            isMouseDown = true;
+            startCell = cell;
+            isSelecting = true;
+            deselectAllApples();
+
+            const cellSize = gameContainer.offsetWidth / gridSize;
+            selectionBox.style.left = `${startCell.col * cellSize}px`;
+            selectionBox.style.top = `${startCell.row * cellSize}px`;
+            selectionBox.style.width = `${cellSize}px`;
+            selectionBox.style.height = `${cellSize}px`;
+            selectionBox.style.display = 'block';
+
+            selectApplesInBox();
+            event.preventDefault();
+        }
+
+
+        function handleSelectionMove(event) {
+            if (!isSelecting || !isMouseDown) return;
+
+            const coords = getRelativeCoordinates(event, gameContainer);
+            if (!coords) return;
+
+            const currentCell = getCellFromCoordinates(coords);
+            if (!currentCell) return;
+
+            const cellSize = gameContainer.offsetWidth / gridSize;
+            const top = Math.min(startCell.row, currentCell.row);
+            const left = Math.min(startCell.col, currentCell.col);
+            const bottom = Math.max(startCell.row, currentCell.row);
+            const right = Math.max(startCell.col, currentCell.col);
+
+            selectionBox.style.top = `${top * cellSize}px`;
+            selectionBox.style.left = `${left * cellSize}px`;
+            selectionBox.style.width = `${(right - left + 1) * cellSize}px`;
+            selectionBox.style.height = `${(bottom - top + 1) * cellSize}px`;
+
+            selectApplesInBox();
+            event.preventDefault();
+        }
+
+        function handleSelectionEnd(event) {
+            if (event.type === 'touchend') { lastTouchEnd = event.timeStamp; }
+            if (!isSelecting) return;
+
+            isMouseDown = false;
+            isSelecting = false;
+            selectionBox.style.display = 'none';
+            checkSum();
+            startCell = null;
+            event.preventDefault();
+        }
+
+        function selectApplesInBox() {
+            const boxRect = selectionBox.getBoundingClientRect();
+            const apples = document.querySelectorAll('.apple');
+            apples.forEach(apple => {
+                const appleRect = apple.getBoundingClientRect();
+                if (isRectOverlapping(boxRect, appleRect)) {
+                    if (!selectedApples.includes(apple)) {
+                        apple.classList.add('selected');
+                        selectedApples.push(apple);
+                    }
+                } else {
+                    apple.classList.remove('selected');
+                    selectedApples = selectedApples.filter(a => a !== apple);
+                }
+            });
+        }
+
+        function deselectAllApples() {
+            selectedApples.forEach(apple => apple.classList.remove('selected'));
+            selectedApples = [];
+        }
+
+        function isRectOverlapping(rect1, rect2) {
+            return !(rect1.right < rect2.left || rect1.left > rect2.right ||
+                     rect1.bottom < rect2.top || rect1.top > rect2.bottom);
+        }
+
+      function checkSum() {
+            let sum = 0;
+            selectedApples.forEach(apple => sum += parseInt(apple.dataset.value));
+
+            if (sum === 10) {
+                score += selectedApples.length;
+                scoreDisplay.textContent = `Score: ${score}`;
+
+                selectedApples.forEach(apple => {
+                    apple.classList.add('removing');
+                    apple.style.setProperty('--random-x', Math.random() * 2 - 1);
+                    apple.style.setProperty('--random-y', Math.random() * 2 - 1);
+                    apple.style.setProperty('--random-rotate', Math.random() * 2 - 1);
+                    apple.style.setProperty('--random-scale', Math.random() * 1 + 0.5);
+
+                    apple.addEventListener('animationend', () => {
+                        const parentCell = apple.parentElement;
+                        if (parentCell && parentCell.classList.contains('grid-cell')) {
+                            parentCell.removeChild(apple);
+                            // After removing, check for combinable pairs
+                            updateCombinablePairs();
+                        }
+                    });
+                });
+
+                selectedApples = [];
+            } else {
+                deselectAllApples();
+            }
+        }
+
+      // Function to check for combinable pairs
+        function hasCombinablePairs() {
+            const apples = document.querySelectorAll('.apple');
+            const values = Array.from(apples).map(apple => parseInt(apple.dataset.value));
+
+            // Check all pairs
+            for (let i = 0; i < values.length; i++) {
+                for (let j = i + 1; j < values.length; j++) {
+                    if (values[i] + values[j] === 10) {
+                        return true; // Found a pair
+                    }
+                }
+            }
+            return false; // No pairs found
+        }
+      // Function to count and update combinable pairs
+        function updateCombinablePairs() {
+            const apples = document.querySelectorAll('.apple');
+            const values = Array.from(apples).map(apple => parseInt(apple.dataset.value));
+            let count = 0;
+
+            for (let i = 0; i < values.length; i++) {
+                for (let j = i + 1; j < values.length; j++) {
+                    if (values[i] + values[j] === 10) {
+                        count++;
+                    }
+                }
+            }
+
+            combinablePairsDisplay.textContent = `Pairs: ${count}`;
+
+             // Check for game over condition *after* updating the count
+            if (count === 0 && apples.length > 0) {
+              gameOverScreen.style.display = "flex"; // Show game over screen
+            }
+        }
+
+
+        function startGame() {
+            populateGrid();
+        }
+
+        function restartGame() {
+            score = 0;
+            scoreDisplay.textContent = "Score: 0";
+            while (gameContainer.firstChild) {
+                gameContainer.removeChild(gameContainer.firstChild);
+            }
+            gameOverScreen.style.display = "none"; // Hide game over
+            startGame();
+        }
+
+        gameContainer.addEventListener('mousedown', handleSelectionStart);
+        gameContainer.addEventListener('mousemove', handleSelectionMove);
+        gameContainer.addEventListener('mouseup', handleSelectionEnd);
+        gameContainer.addEventListener('touchstart', handleSelectionStart);
+        gameContainer.addEventListener('touchmove', handleSelectionMove);
+        gameContainer.addEventListener('touchend', handleSelectionEnd);
+
+        startGame();
+    </script>
+</body>
+</html>
